@@ -1,0 +1,27 @@
+package com.crafterscr.Multiverso.config;
+
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
+
+public class WorldConfig {
+    public String name;
+    public String difficulty = "normal"; // "peaceful", "easy", "normal", "hard"
+    public boolean allowMonsters = true;
+    public boolean allowAnimals = true;
+    public long seed = 0L;
+    public String environment = "overworld"; // "overworld", "nether", "end", o personalizado
+
+    // Nuevos campos para spawn
+    public int spawnX = 0;
+    public int spawnY = 64;
+    public int spawnZ = 0;
+
+    /**
+     * Devuelve la ResourceKey correspondiente a este mundo.
+     * Nota: Usa "multiverso" como namespace fijo.
+     */
+    public static ResourceKey<Level> getDimensionKey(String name) {
+        return ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
+    }
+}
