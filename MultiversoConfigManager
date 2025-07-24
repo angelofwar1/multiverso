@@ -1,0 +1,115 @@
+package com.crafterscr.Multiverso.config;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.nio.file.Files;
+import java.util.Map;
+
+public class MultiversoConfigManager {
+
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final File CONFIG_FILE = new File("config/multiverso-worlds.json");
+
+    private static final MultiversoConfigFile configFile = new MultiversoConfigFile();
+
+    public static void loadConfig() {
+        try {
+            if (!CONFIG_FILE.exists()) {
+                saveConfig();
+                return;
+            }
+
+            FileReader reader = new FileReader(CONFIG_FILE);
+            MultiversoConfigFile loaded = GSON.fromJson(reader, MultiversoConfigFile.class);
+            reader.close();
+
+            if (loaded != null) {
+                configFile.spawnWorld = loaded.spawnWorld;
+                configFile.worlds = loaded.worlds != null ? loaded.worlds : configFile.worlds;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void saveConfig() {
+        try {
+            if (!CONFIG_FILE.getParentFile().exists()) {
+                Files.createDirectories(CONFIG_FILE.getParentFile().toPath());
+            }
+
+            FileWriter writer = new FileWriter(CONFIG_FILE);
+            GSON.toJson(configFile, writer);
+            writer.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static BlockPos getSpawnForWorld(String worldName) {
+        WorldConfig config = getWorldConfig(worldName);
+        if (config == null) {
+            // Retorna spawn por defecto si no existe configuración
+            return new BlockPos(0, 64, 0);
+        }
+        return new BlockPos(config.spawnX, config.spawnY, config.spawnZ);
+    }
+
+    public static void registerWorld(ServerLevel level) {
+        String name = level.dimension().location().getPath();
+
+        if (!configFile.worlds.containsKey(name)) {
+            WorldConfig config = new WorldConfig();
+            config.name = name;
+            config.difficulty = level.getDifficulty().getName();
+            config.seed = level.getSeed();
+            config.allowMonsters = level.getChunkSource().getGenerator().getSpawnSettings().monsterSpawnProbability() > 0;
+            config.allowAnimals = level.getChunkSource().getGenerator().getSpawnSettings().creatureGenerationProbability() > 0;
+            config.environment = level.dimension().location().getNamespace();
+
+            configFile.worlds.put(name, config);
+            saveConfig();
+        }
+    }
+
+    public static WorldConfig getWorldConfig(String name) {
+        return configFile.worlds.get(name);
+    }
+
+    public static Map<String, WorldConfig> getAllConfigs() {
+        return configFile.worlds;
+    }
+
+    public static String getSpawnWorld() {
+        return configFile.spawnWorld;
+    }
+
+    public static void setSpawnWorld(String worldName) {
+        configFile.spawnWorld = worldName;
+        saveConfig();
+    }
+
+    public static void reload() {
+        loadConfig();
+    }
+
+    public static class WorldSettingsApplier {
+        public static void applySettingsToWorld(ServerLevel level) {
+            String name = level.dimension().location().getPath();
+            WorldConfig config = getWorldConfig(name);
+            if (config == null) return;
+
+            level.setDifficulty(Difficulty.byName(config.difficulty));
+            level.setMobSpawnSettings(config.allowMonsters, config.allowAnimals);
+        }
+    }
+}
