@@ -1,0 +1,98 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+public class MvDeleteCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvdelete")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("nombre", StringArgumentType.word())
+                        .suggests((ctx, builder) -> {
+                            List<String> mundos = WorldManager.getInstance().getAvailableWorldNames().stream().toList();
+                            return SharedSuggestionProvider.suggest(mundos, builder);
+                        })
+                        .executes(ctx -> {
+                            ctx.getSource().sendFailure(Component.literal("§cDebes confirmar la eliminación usando: /mvdelete <nombre> confirm"));
+                            return 0;
+                        })
+                        .then(Commands.argument("confirmacion", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    String name = StringArgumentType.getString(ctx, "nombre");
+                                    String confirm = StringArgumentType.getString(ctx, "confirmacion");
+
+                                    if (!confirm.equalsIgnoreCase("confirm")) {
+                                        ctx.getSource().sendFailure(Component.literal("§cDebes escribir 'confirm' para eliminar el mundo."));
+                                        return 0;
+                                    }
+
+                                    return deleteWorld(ctx.getSource(), name);
+                                }))));
+    }
+
+    private static int deleteWorld(CommandSourceStack source, String name) {
+        MinecraftServer server = source.getServer();
+        ResourceKey<Level> levelKey = ResourceKey.create(RegistryAccess.REGISTRY_LEVEL, new ResourceLocation("multiverso", name));
+        ServerLevel level = server.getLevel(levelKey);
+
+        if (levelKey.equals(Level.OVERWORLD) || levelKey.equals(Level.NETHER) || levelKey.equals(Level.END)) {
+            source.sendFailure(Component.literal("§cNo puedes borrar los mundos principales."));
+            return 0;
+        }
+
+        // Descargar si está cargado
+        if (level != null) {
+            level.save(null, true, true);
+            server.levels.remove(levelKey);
+        }
+
+        // Remover del WorldManager
+        WorldManager.getInstance().removeWorld(name);
+
+        // Eliminar carpeta del mundo
+        Path worldPath = server.getWorldPath(LevelResource.ROOT).getParent().resolve(name);
+        try {
+            if (Files.exists(worldPath)) {
+                deleteDirectoryRecursively(worldPath.toFile());
+                source.sendSuccess(Component.literal("§aMundo '" + name + "' eliminado correctamente."), false);
+                return 1;
+            } else {
+                source.sendFailure(Component.literal("§cEl mundo no existe en disco."));
+                return 0;
+            }
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cError al eliminar el mundo: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static void deleteDirectoryRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteDirectoryRecursively(child);
+                }
+            }
+        }
+        file.delete();
+    }
+}
