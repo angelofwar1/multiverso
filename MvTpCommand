@@ -1,0 +1,118 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.stream.Collectors;
+
+public class MvTpCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvtp")
+                .requires(src -> src.hasPermission(2)) // Solo OP o consola
+
+                // Forma: /mvtp <mundo>
+                .then(Commands.argument("mundo", StringArgumentType.word())
+                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                WorldManager.getInstance().getAvailableWorldNames(),
+                                builder))
+                        .executes(ctx -> {
+                            CommandSourceStack source = ctx.getSource();
+                            String worldName = StringArgumentType.getString(ctx, "mundo");
+
+                            if (source.getEntity() instanceof ServerPlayer player) {
+                                return teleportPlayer(source, player, worldName, null, null, null);
+                            } else {
+                                source.sendFailure(Component.literal("§cLa consola debe usar: /mvtp <jugador> <mundo> [x y z]"));
+                                return 0;
+                            }
+                        })
+
+                        // Forma: /mvtp <mundo> <x> <y> <z>
+                        .then(Commands.argument("x", DoubleArgumentType.doubleArg())
+                                .then(Commands.argument("y", DoubleArgumentType.doubleArg())
+                                        .then(Commands.argument("z", DoubleArgumentType.doubleArg())
+                                                .executes(ctx -> {
+                                                    CommandSourceStack source = ctx.getSource();
+                                                    String worldName = StringArgumentType.getString(ctx, "mundo");
+                                                    double x = DoubleArgumentType.getDouble(ctx, "x");
+                                                    double y = DoubleArgumentType.getDouble(ctx, "y");
+                                                    double z = DoubleArgumentType.getDouble(ctx, "z");
+
+                                                    if (source.getEntity() instanceof ServerPlayer player) {
+                                                        return teleportPlayer(source, player, worldName, x, y, z);
+                                                    } else {
+                                                        source.sendFailure(Component.literal("§cLa consola debe usar: /mvtp <jugador> <mundo> [x y z]"));
+                                                        return 0;
+                                                    }
+                                                })))))
+                // Forma: /mvtp <jugador> <mundo> [x y z]
+                .then(Commands.argument("jugador", StringArgumentType.word())
+                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                ctx.getSource().getServer().getPlayerList().getPlayers().stream()
+                                        .map(p -> p.getGameProfile().getName())
+                                        .collect(Collectors.toList()),
+                                builder))
+                        .then(Commands.argument("mundo", StringArgumentType.word())
+                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                        WorldManager.getInstance().getAvailableWorldNames(),
+                                        builder))
+                                .executes(ctx -> {
+                                    String playerName = StringArgumentType.getString(ctx, "jugador");
+                                    String worldName = StringArgumentType.getString(ctx, "mundo");
+                                    ServerPlayer target = ctx.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+                                    if (target == null) {
+                                        ctx.getSource().sendFailure(Component.literal("§cEl jugador '" + playerName + "' no está conectado."));
+                                        return 0;
+                                    }
+                                    return teleportPlayer(ctx.getSource(), target, worldName, null, null, null);
+                                })
+                                .then(Commands.argument("x", DoubleArgumentType.doubleArg())
+                                        .then(Commands.argument("y", DoubleArgumentType.doubleArg())
+                                                .then(Commands.argument("z", DoubleArgumentType.doubleArg())
+                                                        .executes(ctx -> {
+                                                            String playerName = StringArgumentType.getString(ctx, "jugador");
+                                                            String worldName = StringArgumentType.getString(ctx, "mundo");
+                                                            double x = DoubleArgumentType.getDouble(ctx, "x");
+                                                            double y = DoubleArgumentType.getDouble(ctx, "y");
+                                                            double z = DoubleArgumentType.getDouble(ctx, "z");
+
+                                                            ServerPlayer target = ctx.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+                                                            if (target == null) {
+                                                                ctx.getSource().sendFailure(Component.literal("§cEl jugador '" + playerName + "' no está conectado."));
+                                                                return 0;
+                                                            }
+                                                            return teleportPlayer(ctx.getSource(), target, worldName, x, y, z);
+                                                        })))))));
+    }
+
+    private static int teleportPlayer(CommandSourceStack source, ServerPlayer player, String worldName, Double x, Double y, Double z) {
+        var level = WorldManager.getInstance().getWorld(worldName);
+        if (!(level instanceof ServerLevel targetLevel)) {
+            source.sendFailure(Component.literal("§cEl mundo '" + worldName + "' no está cargado o no existe."));
+            return 0;
+        }
+
+        double finalX = (x != null) ? x : targetLevel.getSharedSpawnPos().getX() + 0.5;
+        double finalY = (y != null) ? y : targetLevel.getSharedSpawnPos().getY();
+        double finalZ = (z != null) ? z : targetLevel.getSharedSpawnPos().getZ() + 0.5;
+
+        player.teleportTo(targetLevel, finalX, finalY, finalZ, player.getYRot(), player.getXRot());
+
+        if (!player.getUUID().equals(source.getEntity() != null ? source.getEntity().getUUID() : null)) {
+            source.sendSuccess(Component.literal("§aJugador '" + player.getName().getString() + "' teletransportado a '" + worldName + "'."), true);
+        } else {
+            source.sendSuccess(Component.literal("§aTeletransportado a '" + worldName + "'."), false);
+        }
+
+        return 1;
+    }
+}
