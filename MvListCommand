@@ -1,0 +1,58 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.mojang.brigadier.CommandDispatcher;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+
+import java.util.Map;
+
+public class MvListCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvlist")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> listWorlds(ctx.getSource())));
+    }
+
+    private static int listWorlds(CommandSourceStack source) {
+        Map<String, ServerLevel> worlds = WorldManager.getInstance().getLoadedWorlds();
+
+        if (worlds.isEmpty()) {
+            source.sendSuccess(Component.literal("§cNo hay mundos cargados."), false);
+            return 0;
+        }
+
+        source.sendSuccess(Component.literal("§e§l[§a§lCraftersCR§e§l] §6§lMundos cargados:"), false);
+
+        for (Map.Entry<String, ServerLevel> entry : worlds.entrySet()) {
+            String worldName = entry.getKey();
+            ServerLevel level = entry.getValue();
+
+            ResourceKey<Level> dim = level.dimension();
+            String typeColor = "§7";
+            if (dim == Level.OVERWORLD) typeColor = "§a";
+            else if (dim == Level.NETHER) typeColor = "§c";
+            else if (dim == Level.END) typeColor = "§b";
+
+            int playerCount = 0;
+            for (Player player : level.players()) {
+                playerCount++;
+            }
+
+            long seed = level.getSeed();
+
+            String line = String.format("%s- %s §7| Jugadores: %d §7| Semilla: %d",
+                    typeColor, worldName, playerCount, seed);
+
+            source.sendSuccess(Component.literal(line), false);
+        }
+
+        return 1;
+    }
+}
