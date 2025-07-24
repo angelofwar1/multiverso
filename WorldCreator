@@ -30,21 +30,14 @@ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
-import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.level.storage.PrimaryLevelData;
-import net.minecraft.world.level.storage.WorldData;
 import org.slf4j.Logger;
 
-
-
-
-
-
+import java.util.concurrent.Executor;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,8 +45,24 @@ import java.nio.file.Path;
 import java.util.Map;
 
 public class WorldCreator {
-
     private static final Logger LOGGER = LogUtils.getLogger();
+
+    public static ServerLevel loadExistingWorld(MinecraftServer server, String worldName) {
+        ResourceKey<Level> key = ResourceKey.create(
+                Registries.DIMENSION,
+                new ResourceLocation("multiverso", worldName)
+        );
+
+        // Si ya está cargado, lo devolvemos
+        ServerLevel existing = server.getLevel(key);
+        if (existing != null) {
+            return existing;
+        }
+
+        // Aquí tu lógica de carga (o devolución null si no existe)
+        LOGGER.info("Intentando cargar mundo existente: " + worldName);
+        return null;
+    }
 
     public static int createWorld(CommandSourceStack source, String name, String type, String generator, ServerPlayer player) {
         MinecraftServer server = source.getServer();
@@ -168,17 +177,22 @@ public class WorldCreator {
                 Lifecycle.stable()
         );
 
-        // Crear el mundo
+        // Aquí el único cambio clave: usar server.getExecutor() para 1.20.1
         ServerLevel newWorld = new ServerLevel(
                 server,
-                server.getBackgroundExecutor(),  // ← método correcto
+                ( Executor ) server::execute,
                 storageAccess,
                 worldData,
                 levelKey,
                 levelStem,
-                false,
-                null
+                false,       // <— parámetro 7
+                0L,          // <— parámetro 8
+                null,        // <— parámetro 9
+                null,       // <— parámetro 10
+                false,      // <— parámetro 11
+                false       // <— parámetro 12
         );
+
 
 
         // Si es void, colocar plataforma
@@ -196,14 +210,19 @@ public class WorldCreator {
             }
         }
 
-        // Registrar el mundo en tu sistema
+        // Registrar en tu WorldManager
         WorldManager.getInstance().addWorld(name, newWorld);
 
-        // Registrar la configuración (ajusta si tu constructor es diferente)
-        WorldConfig config = new WorldConfig(name, type, generator, 0, "normal", true, true);
-        MultiversoConfigManager.registerWorld(name, config, server.getWorldPath(LevelResource.ROOT).getParent());
+        // Crear config usando el constructor de 3 parámetros
+        WorldConfig config = new WorldConfig(name, type, generator);
 
-        source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' creado correctamente."), false);
+        // Registrar config en tu manager (un solo parámetro)
+        MultiversoConfigManager.registerWorld(config);
+
+        source.sendSuccess(() ->
+                        Component.literal("§aMundo '" + name + "' creado correctamente."),
+                false
+        );
         return 1;
     }
 
