@@ -1,0 +1,29 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.mojang.brigadier.CommandDispatcher;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+
+public class MVHelpCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvhelp")
+                .executes(ctx -> {
+                    CommandSourceStack source = ctx.getSource();
+
+                    source.sendSuccess(Component.literal("§6===§e§l[§a§lCraftersCR§e§l] §aComandos Multiverso §6==="), false);
+                    source.sendSuccess(Component.literal("§e/mvcreate <name> <type> <generator> §7- Crear un nuevo mundo"), false);
+                    source.sendSuccess(Component.literal("§e/mvload <name> §7- Cargar un mundo existente"), false);
+                    source.sendSuccess(Component.literal("§e/mvdelete <name> confirm §7- Eliminar un mundo (requiere confirmación)"), false);
+                    source.sendSuccess(Component.literal("§e/mvtp <name> §7- Teletransportarse a un mundo"), false);
+                    source.sendSuccess(Component.literal("§e/mvlist §7- Listar mundos cargados"), false);
+                    source.sendSuccess(Component.literal("§e/mvremove <name> §7- Descargar un mundo cargado"), false);
+                    source.sendSuccess(Component.literal("§e/mvreloadconfig §7- Recargar la configuración de mundos"), false);
+                    source.sendSuccess(Component.literal("§6==========================="), false);
+
+                    return 1;
+                })
+        );
+    }
+}
