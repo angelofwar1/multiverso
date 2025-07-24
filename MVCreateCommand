@@ -1,0 +1,52 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.world.WorldCreator;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.List;
+
+public class MVCreateCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvcreate")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument("type", StringArgumentType.word()) // overworld, nether, end
+                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(List.of("overworld", "nether", "end"), builder))
+                                .then(Commands.argument("generator", StringArgumentType.word()) // normal, flat, void
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(List.of("normal", "flat", "void"), builder))
+                                        .executes(ctx -> {
+                                            String name = StringArgumentType.getString(ctx, "name");
+                                            String type = StringArgumentType.getString(ctx, "type");
+                                            String generator = StringArgumentType.getString(ctx, "generator");
+
+                                            // Validar nombre
+                                            if (!isValidWorldName(name)) {
+                                                ctx.getSource().sendFailure(Component.literal("§cNombre de mundo inválido. Usa solo letras, números, guiones bajos (_) o medios (-)."));
+                                                return 0;
+                                            }
+
+                                            // Obtener jugador que ejecuta el comando (puede ser null)
+                                            ServerPlayer player = null;
+                                            if (ctx.getSource().getEntity() instanceof ServerPlayer p) {
+                                                player = p;
+                                            }
+
+                                            return WorldCreator.createWorld(ctx.getSource(), name, type, generator, player);
+                                        })
+                                )
+                        )
+                )
+        );
+    }
+
+    private static boolean isValidWorldName(String name) {
+        return name.matches("^[a-zA-Z0-9_-]+$");
+    }
+}
