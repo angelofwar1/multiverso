@@ -1,0 +1,9 @@
+package com.crafterscr.Multiverso.config;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class MultiversoConfigFile {
+    public String spawnWorld = "world";
+    public Map<String, WorldConfig> worlds = new HashMap<>();
+}
