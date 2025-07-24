@@ -1,0 +1,16 @@
+package com.crafterscr.Multiverso.util;
+
+import net.minecraft.world.level.validation.DirectoryValidator;
+
+import java.nio.file.Path;
+
+public class PermissiveDirectoryValidator extends DirectoryValidator {
+    public PermissiveDirectoryValidator() {
+        super("multiverso"); // Requiere un string de "contexto" o "source"
+    }
+
+    @Override
+    public boolean validate(Path path) {
+        return true;
+    }
+}
