@@ -1,0 +1,47 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.config.MultiversoConfigManager;
+import com.crafterscr.Multiverso.config.WorldConfig;
+import com.mojang.brigadier.CommandDispatcher;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+
+public class MvSetSpawnCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvsetspawn")
+                .requires(source -> source.hasPermission(2))
+                .executes(ctx -> {
+                    CommandSourceStack source = ctx.getSource();
+
+                    if (!(source.getEntity() instanceof ServerPlayer player)) {
+                        source.sendFailure(Component.literal("§cEste comando solo puede ser usado por jugadores."));
+                        return 0;
+                    }
+
+                    ServerLevel world = player.serverLevel();
+                    String worldName = world.getLevel().dimension().location().getPath();
+                    BlockPos pos = player.blockPosition();
+
+                    // Establecer spawn en el mundo real
+                    world.setDefaultSpawnPos(pos, 0);
+
+                    // Guardar en configuración
+                    WorldConfig config = MultiversoConfigManager.getWorldConfig(worldName);
+                    if (config != null) {
+                        config.spawnX = pos.getX();
+                        config.spawnY = pos.getY();
+                        config.spawnZ = pos.getZ();
+                        MultiversoConfigManager.saveConfig();
+                    }
+
+                    source.sendSuccess(Component.literal("§aSpawn establecido y guardado para el mundo §e" + worldName +
+                            " §aen §b" + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
+                    return 1;
+                }));
+    }
+}
