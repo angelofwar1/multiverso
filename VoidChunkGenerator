@@ -1,0 +1,70 @@
+// src/main/java/com/crafterscr/Multiverso/world/VoidChunkGenerator.java
+package com.crafterscr.Multiverso.world;
+
+import com.mojang.serialization.Codec;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.level.levelgen.*;
+import net.minecraft.world.level.levelgen.blending.Blender;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import net.minecraft.world.level.levelgen.synth.NormalNoise.NoiseParameters;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+
+public class VoidChunkGenerator extends ChunkGenerator {
+
+    public VoidChunkGenerator(BiomeSource biomeSource) {
+        super(biomeSource);
+    }
+
+    @Override
+    public void buildSurface(WorldGenRegion region, StructureManager structures, RandomState state) {
+        // No construimos nada
+    }
+
+    @Override
+    protected Codec<? extends ChunkGenerator> codec() {
+        // No es necesario codificar, usamos esto solo en tiempo de ejecución
+        throw new UnsupportedOperationException("VoidChunkGenerator no debe ser serializado");
+    }
+
+    @Override
+    public void applyCarvers(WorldGenRegion region, long seed, RandomState state, BiomeManager biomeManager, StructureManager structureManager, ChunkAccess chunk, GenerationStep.Carving carving) {}
+
+    @Override
+    public void fillFromNoise(Executor executor, Blender blender, RandomState state, StructureManager structureManager, ChunkAccess chunk) {
+        // No generamos terreno
+    }
+
+    @Override
+    public int getGenDepth() {
+        return 64;
+    }
+
+    @Override
+    public CompletableFuture<ChunkAccess> fillFromNoise(Executor executor, Blender blender, RandomState state,
+                                                        StructureManager structureManager, ChunkAccess chunkAccess) {
+        return CompletableFuture.completedFuture(chunkAccess);
+    }
+}
