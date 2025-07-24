@@ -1,0 +1,211 @@
+package com.crafterscr.Multiverso.world;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.crafterscr.Multiverso.config.MultiversoConfigManager;
+import com.crafterscr.Multiverso.config.WorldConfig;
+import com.crafterscr.Multiverso.util.PermissiveDirectoryValidator;
+import com.mojang.datafixers.DataFixer;
+import com.mojang.logging.LogUtils;
+import com.mojang.serialization.Lifecycle;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.*;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.FixedBiomeSource;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
+import net.minecraft.world.level.levelgen.WorldDimensions;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.LevelStorageSource;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.world.level.storage.PrimaryLevelData;
+import net.minecraft.world.level.storage.WorldData;
+import org.slf4j.Logger;
+
+
+
+
+
+
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+
+public class WorldCreator {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    public static int createWorld(CommandSourceStack source, String name, String type, String generator, ServerPlayer player) {
+        MinecraftServer server = source.getServer();
+        var registryAccess = server.registryAccess();
+
+        ResourceKey<Level> levelKey = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
+        ResourceKey<LevelStem> stemKey = ResourceKey.create(net.minecraft.core.registries.Registries.LEVEL_STEM, new ResourceLocation("multiverso", name));
+
+        // Tipo de dimensión
+        Holder<DimensionType> dimensionTypeHolder;
+        try {
+            switch (type.toLowerCase()) {
+                case "nether" -> dimensionTypeHolder = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE)
+                        .getHolderOrThrow(BuiltinDimensionTypes.NETHER);
+                case "end" -> dimensionTypeHolder = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE)
+                        .getHolderOrThrow(BuiltinDimensionTypes.END);
+                case "overworld" -> dimensionTypeHolder = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE)
+                        .getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
+                default -> {
+                    source.sendFailure(Component.literal("§cTipo de dimensión inválido: " + type));
+                    return 0;
+                }
+            }
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cError obteniendo el tipo de dimensión."));
+            LOGGER.error("Error al obtener tipo de dimensión", e);
+            return 0;
+        }
+
+        // Crear generador
+        ChunkGenerator chunkGenerator = switch (generator.toLowerCase()) {
+            case "flat" -> {
+                Registry<Biome> biomeRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+                ResourceKey<Registry<FlatLevelGeneratorSettings>> flatSettingsRegistryKey = ResourceKey.createRegistryKey(new ResourceLocation("minecraft", "flat_level_generator_settings"));
+                HolderGetter<FlatLevelGeneratorSettings> flatSettingsGetter = registryAccess.lookupOrThrow(flatSettingsRegistryKey);
+                Holder<FlatLevelGeneratorSettings> flatSettingsHolder = flatSettingsGetter.getOrThrow(ResourceKey.create(flatSettingsRegistryKey, new ResourceLocation("minecraft", "default")));
+                FlatLevelGeneratorSettings flatSettings = flatSettingsHolder.value();
+                yield new FlatLevelSource(flatSettings);
+            }
+            case "normal" -> {
+                var overworld = server.overworld();
+                yield overworld.getChunkSource().getGenerator();
+            }
+            case "void" -> {
+                var biomeRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+                var plains = biomeRegistry.getHolderOrThrow(Biomes.PLAINS);
+                var biomeSource = new FixedBiomeSource(plains);
+                yield new VoidChunkGenerator(biomeSource);
+            }
+            default -> {
+                source.sendFailure(Component.literal("§cGenerador inválido: " + generator));
+                yield null;
+            }
+        };
+
+        if (chunkGenerator == null) return 0;
+
+        LevelStem levelStem = new LevelStem(dimensionTypeHolder, chunkGenerator);
+
+        // Crear acceso al almacenamiento sin mixin
+        LevelStorageSource.LevelStorageAccess storageAccess;
+        try {
+            Path savesDir = server.getWorldPath(LevelResource.ROOT);
+            Path backupsDir = savesDir.resolve("../backups").normalize();
+
+            if (!Files.exists(backupsDir)) {
+                Files.createDirectories(backupsDir);
+            }
+
+            DataFixer dataFixer = server.getFixerUpper();
+
+            LevelStorageSource storageSource = new LevelStorageSource(
+                    savesDir,
+                    backupsDir,
+                    new PermissiveDirectoryValidator(), // tu validador personalizado
+                    dataFixer
+            );
+
+            storageAccess = storageSource.createAccess(name);
+        } catch (IOException e) {
+            LOGGER.error("No se pudo crear acceso al almacenamiento", e);
+            source.sendFailure(Component.literal("§cError de almacenamiento."));
+            return 0;
+        }
+
+        // Obtener LevelSettings del overworld (cast a PrimaryLevelData si es posible)
+        LevelSettings levelSettings;
+        try {
+            PrimaryLevelData overworldData = (PrimaryLevelData) server.overworld().getLevelData();
+            levelSettings = overworldData.getLevelSettings();
+        } catch (ClassCastException e) {
+            // Si no se puede castear, crear LevelSettings básicos
+            levelSettings = new LevelSettings(
+                    name,
+                    GameType.SURVIVAL,
+                    false,
+                    Difficulty.NORMAL,
+                    false,
+                    new GameRules(),
+                    WorldDataConfiguration.DEFAULT
+            );
+        }
+
+        // Opciones del mundo
+        WorldOptions worldOptions = new WorldOptions(0L, true, false);
+
+        // Crear datos del mundo
+        PrimaryLevelData worldData = new PrimaryLevelData(
+                levelSettings,
+                worldOptions,
+                PrimaryLevelData.SpecialWorldProperty.NONE,
+                Lifecycle.stable()
+        );
+
+        // Crear el mundo
+        ServerLevel newWorld = new ServerLevel(
+                server,
+                server.getBackgroundExecutor(),  // ← método correcto
+                storageAccess,
+                worldData,
+                levelKey,
+                levelStem,
+                false,
+                null
+        );
+
+
+        // Si es void, colocar plataforma
+        if (generator.equalsIgnoreCase("void")) {
+            int y = newWorld.getMinBuildHeight() + 64;
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    newWorld.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
+                }
+            }
+            newWorld.setBlockAndUpdate(new BlockPos(0, y + 1, 0), Blocks.TORCH.defaultBlockState());
+
+            if (player != null) {
+                player.teleportTo(newWorld, 0.5, y + 1, 0.5, player.getYRot(), player.getXRot());
+            }
+        }
+
+        // Registrar el mundo en tu sistema
+        WorldManager.getInstance().addWorld(name, newWorld);
+
+        // Registrar la configuración (ajusta si tu constructor es diferente)
+        WorldConfig config = new WorldConfig(name, type, generator, 0, "normal", true, true);
+        MultiversoConfigManager.registerWorld(name, config, server.getWorldPath(LevelResource.ROOT).getParent());
+
+        source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' creado correctamente."), false);
+        return 1;
+    }
+
+
+}
