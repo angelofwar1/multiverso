@@ -1,0 +1,87 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.config.MultiversoConfigManager;
+import com.crafterscr.Multiverso.config.WorldConfig;
+import com.crafterscr.Multiverso.util.WorldSettingsApplier;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+
+import java.util.List;
+
+public class MVSetCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvset")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("mundo", StringArgumentType.word())
+                        .then(Commands.argument("opcion", StringArgumentType.word())
+                                .suggests((ctx, builder) ->
+                                        SharedSuggestionProvider.suggest(List.of("difficulty", "allowMonsters", "allowAnimals"), builder))
+                                .then(Commands.argument("valor", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> {
+                                            String option = StringArgumentType.getString(ctx, "opcion").toLowerCase();
+                                            return switch (option) {
+                                                case "difficulty" -> SharedSuggestionProvider.suggest(List.of("peaceful", "easy", "normal", "hard"), builder);
+                                                case "allowmonsters", "allowanimals" -> SharedSuggestionProvider.suggest(List.of("true", "false"), builder);
+                                                default -> SharedSuggestionProvider.suggest(List.of(), builder);
+                                            };
+                                        })
+                                        .executes(MVSetCommand::execute)
+                                )
+                        )
+                )
+        );
+    }
+
+    private static int execute(CommandContext<CommandSourceStack> ctx) {
+        String worldName = StringArgumentType.getString(ctx, "mundo");
+        String option = StringArgumentType.getString(ctx, "opcion").toLowerCase();
+        String value = StringArgumentType.getString(ctx, "valor").toLowerCase();
+
+        WorldConfig config = MultiversoConfigManager.getWorldConfig(worldName);
+
+        if (config == null) {
+            ctx.getSource().sendFailure(Component.literal("§cEl mundo '" + worldName + "' no está registrado."));
+            return 0;
+        }
+
+        switch (option) {
+            case "difficulty" -> {
+                if (!value.matches("peaceful|easy|normal|hard")) {
+                    ctx.getSource().sendFailure(Component.literal("§cValor de dificultad inválido. Usa: peaceful, easy, normal o hard."));
+                    return 0;
+                }
+                config.difficulty = value;
+            }
+            case "allowmonsters" -> {
+                if (!value.equals("true") && !value.equals("false")) {
+                    ctx.getSource().sendFailure(Component.literal("§cValor inválido. Usa true o false."));
+                    return 0;
+                }
+                config.allowMonsters = Boolean.parseBoolean(value);
+            }
+            case "allowanimals" -> {
+                if (!value.equals("true") && !value.equals("false")) {
+                    ctx.getSource().sendFailure(Component.literal("§cValor inválido. Usa true o false."));
+                    return 0;
+                }
+                config.allowAnimals = Boolean.parseBoolean(value);
+            }
+            default -> {
+                ctx.getSource().sendFailure(Component.literal("§cOpción inválida. Usa difficulty, allowMonsters o allowAnimals."));
+                return 0;
+            }
+        }
+
+        WorldSettingsApplier.applySettings(ctx.getSource().getServer(), worldName, config);
+        MultiversoConfigManager.saveConfig();
+        ctx.getSource().sendSuccess(Component.literal("§aConfiguración actualizada para el mundo '" + worldName + "'."), false);
+        return 1;
+    }
+}
