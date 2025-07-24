@@ -1,0 +1,102 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.crafterscr.Multiverso.world.WorldCreator;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+public class MvLoadCommand {
+
+    private static final String NAMESPACE = "multiverso";
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvload")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("nombre", StringArgumentType.word())
+                        .suggests((ctx, builder) -> {
+                            MinecraftServer server = ctx.getSource().getServer();
+                            Path worldsRoot = server.getWorldPath(LevelResource.ROOT).getParent();
+
+                            List<String> availableWorlds = new ArrayList<>();
+                            if (Files.exists(worldsRoot)) {
+                                File[] files = worldsRoot.toFile().listFiles(File::isDirectory);
+                                if (files != null) {
+                                    for (File file : files) {
+                                        availableWorlds.add(file.getName());
+                                    }
+                                }
+                            }
+                            return SharedSuggestionProvider.suggest(availableWorlds, builder);
+                        })
+                        .executes(ctx -> {
+                            String name = StringArgumentType.getString(ctx, "nombre");
+
+                            // Validar nombre de mundo
+                            if (!isValidWorldName(name)) {
+                                ctx.getSource().sendFailure(Component.literal("§cNombre de mundo inválido. Solo letras, números, guiones bajos (_) o medios (-)."));
+                                return 0;
+                            }
+
+                            return loadWorld(ctx.getSource(), name);
+                        })
+                ));
+    }
+
+    private static int loadWorld(CommandSourceStack source, String name) {
+        MinecraftServer server = source.getServer();
+        ResourceKey<Level> levelKey = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation(NAMESPACE, name));
+
+        // Verificar si el mundo ya está cargado
+        ServerLevel existingLevel = server.getLevel(levelKey);
+        if (existingLevel != null) {
+            source.sendFailure(Component.literal("§cEl mundo '" + name + "' ya está cargado."));
+            return 0;
+        }
+
+        // Verificar que exista la carpeta del mundo
+        Path worldsRoot = server.getWorldPath(LevelResource.ROOT).getParent();
+        Path worldPath = worldsRoot.resolve(name);
+
+        if (!Files.exists(worldPath) || !Files.isDirectory(worldPath)) {
+            source.sendFailure(Component.literal("§cLa carpeta del mundo '" + name + "' no existe."));
+            return 0;
+        }
+
+        try {
+            ServerLevel loadedLevel = WorldCreator.loadExistingWorld(server, name);
+            if (loadedLevel == null) {
+                source.sendFailure(Component.literal("§cNo se pudo cargar el mundo '" + name + "'."));
+                return 0;
+            }
+
+            WorldManager.getInstance().addWorld(name, loadedLevel);
+            source.sendSuccess(Component.literal("§aMundo '" + name + "' cargado correctamente."), false);
+            return 1;
+
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("§cError al cargar el mundo: " + e.getMessage()));
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    private static boolean isValidWorldName(String name) {
+        return name.matches("^[a-zA-Z0-9_-]+$");
+    }
+}
