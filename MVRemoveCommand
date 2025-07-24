@@ -1,0 +1,60 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.WorldManager;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+
+import java.util.List;
+
+public class MvRemoveCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvremove")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.argument("nombre", StringArgumentType.word())
+                        // Sugiere mundos manejados por Multiverso
+                        .suggests((ctx, builder) -> {
+                            List<String> mundos = WorldManager.getInstance().getAvailableWorldNames();
+                            return SharedSuggestionProvider.suggest(mundos, builder);
+                        })
+                        .executes(ctx -> {
+                            ctx.getSource().sendFailure(Component.literal("§cDebes confirmar la acción usando: /mvremove <nombre> confirm"));
+                            return 0;
+                        })
+                        .then(Commands.argument("confirmacion", StringArgumentType.word())
+                                .executes(ctx -> {
+                                    String name = StringArgumentType.getString(ctx, "nombre");
+                                    String confirm = StringArgumentType.getString(ctx, "confirmacion");
+
+                                    if (!confirm.equalsIgnoreCase("confirm")) {
+                                        ctx.getSource().sendFailure(Component.literal("§cDebes escribir 'confirm' para remover el mundo."));
+                                        return 0;
+                                    }
+
+                                    return removeWorld(ctx.getSource(), name);
+                                }))));
+    }
+
+    private static int removeWorld(CommandSourceStack source, String name) {
+        MinecraftServer server = source.getServer();
+        ServerLevel level = WorldManager.getInstance().getWorld(name);
+
+        if (level == null) {
+            source.sendFailure(Component.literal("§cEl mundo '" + name + "' no está cargado o no existe."));
+            return 0;
+        }
+
+        // Guardar y descargar el mundo
+        level.save(null, true, true);
+        WorldManager.getInstance().unloadWorld(name);
+
+        source.sendSuccess(Component.literal("§aMundo '" + name + "' removido correctamente."), false);
+        return 1;
+    }
+}
