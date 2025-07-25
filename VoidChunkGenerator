@@ -15,49 +15,24 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.*;
 import net.minecraft.world.level.levelgen.blending.Blender;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import  net.minecraft.world.level.levelgen.structure.Structure.StructureSettings;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
 
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 public class VoidChunkGenerator extends ChunkGenerator {
 
-    // Codec para serialización (se usa en datapacks y demás)
-    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create(instance ->
-            instance.group(
-                    BiomeSource.CODEC.fieldOf("biome_source").forGetter(g -> g.biomeSource),
-                    Structure.StructureSettings.CODEC.fieldOf("structure_settings").forGetter(g -> g.structureSettings)
-            ).apply(instance, VoidChunkGenerator::new)
-    );
+    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+            BiomeSource.CODEC.fieldOf("biome_source").forGetter(gen -> gen.biomeSource)
+    ).apply(instance, VoidChunkGenerator::new));
 
     private final BiomeSource biomeSource;
-    private final Structure.StructureSettings structureSettings;
-    private final Holder<StructureSettings> settings;
 
-    // Constructor
-    public VoidChunkGenerator(BiomeSource biomeSource, StructureSettings structureSettings, Holder<StructureSettings> settings) {
-        super(biomeSource);
+
+    public VoidChunkGenerator(BiomeSource biomeSource) {
+        super(biomeSource, biome -> biome.value().getGenerationSettings());
         this.biomeSource = biomeSource;
-        this.structureSettings = structureSettings;
-        this.settings = settings;
-    }
-
-    // Constructor para crear configuración vacía de estructuras (por si usas constructor vacío)
-    public VoidChunkGenerator(BiomeSource biomeSource, StructureSettings structureSettings) {
-        this(biomeSource, structureSettings, emptyStructureSettings());
-    }
-
-    private static Holder<StructureSettings> emptyStructureSettings() {
-        StructureSettings settings = new StructureSettings(
-                Map.of(), // estructuras normales
-                Map.of(), // estructuras legacy
-                NoiseSettings.DEFAULT, // usa el default o define uno vacío si no existe
-                false // no usar fuente de aleatoriedad legacy
-        );
-        return Holder.direct(settings);
     }
 
     @Override
@@ -65,54 +40,24 @@ public class VoidChunkGenerator extends ChunkGenerator {
         return CODEC;
     }
 
-    // Aquí evitas generar terreno, superficie, carvers, mobs, etc.
-
     @Override
-    public void buildSurface(WorldGenRegion region, StructureManager structures, RandomState random, ChunkAccess chunk) {
-        // Vacío, no hace nada para superficie
+    public void buildSurface(WorldGenRegion region, StructureManager structureManager, RandomState randomState, ChunkAccess chunk) {
+        // No genera superficie
     }
 
     @Override
     public void applyCarvers(WorldGenRegion region, long seed, RandomState random, BiomeManager biomeManager, StructureManager structureManager, ChunkAccess chunk, GenerationStep.Carving carving) {
-        // No aplica carvers
-    }
-
-    @Override
-    public void buildNoise(WorldGenRegion region, StructureManager structureManager, RandomState randomState, ChunkAccess chunk) {
-        // Sin ruido, todo vacío
+        // No carvers
     }
 
     @Override
     public void spawnOriginalMobs(WorldGenRegion region) {
-        // No spawnea mobs
+        // No mobs
     }
 
-    @Override
-    public int getBaseHeight(int x, int z, LevelHeightAccessor heightAccessor, RandomState randomState) {
-        return heightAccessor.getMinBuildHeight(); // Todo al mínimo (vacío)
-    }
-
-    @Override
-    public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor heightAccessor, RandomState randomState) {
-        return new NoiseColumn(heightAccessor.getMinBuildHeight(), new BlockState[0]); // Sin bloques
-    }
-
-    @Override
-    public void addDebugScreenInfo(List<String> p_223175_, RandomState p_223176_, BlockPos p_223177_) {
-
-    }
-
-    // Implementa getGenDepth() porque es abstracto en ChunkGenerator
     @Override
     public int getGenDepth() {
-        // La profundidad total generada (altura del mundo)
-        return 384; // Por ejemplo, 384 bloques, igual que el overworld
-    }
-
-    @Override
-    public void fillFromNoise(Executor executor, Blender blender, RandomState randomState,
-                              StructureManager structureManager, ChunkAccess chunk) {
-        // No generamos nada en este generador vacío
+        return 384;
     }
 
     @Override
@@ -126,7 +71,23 @@ public class VoidChunkGenerator extends ChunkGenerator {
     }
 
     @Override
-    public int getBaseHeight(int p_223032_, int p_223033_, Heightmap.Types p_223034_, LevelHeightAccessor p_223035_, RandomState p_223036_) {
+    public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor heightAccessor, RandomState randomState) {
         return 0;
+    }
+
+    @Override
+    public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor heightAccessor, RandomState randomState) {
+        return new NoiseColumn(0, new BlockState[0]);
+    }
+
+    @Override
+    public void addDebugScreenInfo(List<String> p_223175_, RandomState p_223176_, BlockPos p_223177_) {
+
+    }
+
+    @Override
+    public CompletableFuture<ChunkAccess> fillFromNoise(Executor executor, Blender blender, RandomState randomState, StructureManager structureManager, ChunkAccess chunk) {
+        // Como no hacemos nada (chunk vacío), simplemente devolvemos el mismo chunk envuelto en un future
+        return CompletableFuture.completedFuture(chunk);
     }
 }
