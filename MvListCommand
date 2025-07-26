@@ -24,11 +24,11 @@ public class MvListCommand {
         Map<String, ServerLevel> worlds = WorldManager.getInstance().getLoadedWorlds();
 
         if (worlds.isEmpty()) {
-            source.sendSuccess(Component.literal("§cNo hay mundos cargados."), false);
+            source.sendSuccess(() -> Component.literal("§cNo hay mundos cargados."), false);
             return 0;
         }
 
-        source.sendSuccess(Component.literal("§e§l[§a§lCraftersCR§e§l] §6§lMundos cargados:"), false);
+        source.sendSuccess(() -> Component.literal("§e§l[§a§lCraftersCR§e§l] §6§lMundos cargados:"), false);
 
         for (Map.Entry<String, ServerLevel> entry : worlds.entrySet()) {
             String worldName = entry.getKey();
@@ -50,7 +50,7 @@ public class MvListCommand {
             String line = String.format("%s- %s §7| Jugadores: %d §7| Semilla: %d",
                     typeColor, worldName, playerCount, seed);
 
-            source.sendSuccess(Component.literal(line), false);
+            source.sendSuccess(() -> Component.literal(line), false);
         }
 
         return 1;
