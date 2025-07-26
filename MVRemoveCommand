@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MvRemoveCommand {
@@ -20,7 +21,7 @@ public class MvRemoveCommand {
                 .then(Commands.argument("nombre", StringArgumentType.word())
                         // Sugiere mundos manejados por Multiverso
                         .suggests((ctx, builder) -> {
-                            List<String> mundos = WorldManager.getInstance().getAvailableWorldNames();
+                            List<String> mundos = new ArrayList<>(WorldManager.getInstance().getAvailableWorldNames());
                             return SharedSuggestionProvider.suggest(mundos, builder);
                         })
                         .executes(ctx -> {
@@ -43,7 +44,8 @@ public class MvRemoveCommand {
 
     private static int removeWorld(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
-        ServerLevel level = WorldManager.getInstance().getWorld(name);
+        ServerLevel level = (ServerLevel) WorldManager.getInstance().getWorld(name);
+
 
         if (level == null) {
             source.sendFailure(Component.literal("§cEl mundo '" + name + "' no está cargado o no existe."));
@@ -54,7 +56,8 @@ public class MvRemoveCommand {
         level.save(null, true, true);
         WorldManager.getInstance().unloadWorld(name);
 
-        source.sendSuccess(Component.literal("§aMundo '" + name + "' removido correctamente."), false);
+        source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' removido correctamente."), false);
+
         return 1;
     }
 }
