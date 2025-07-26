@@ -24,4 +24,15 @@ public class WorldConfig {
     public static ResourceKey<Level> getDimensionKey(String name) {
         return ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
     }
+    public WorldConfig() {
+    }
+
+    public String generator = "normal";
+    public WorldConfig(String name, String environment, long seed, String generator) {
+        this.name = name;
+        this.environment = environment;
+        this.seed = seed;
+        this.generator = generator;
+    }
+
 }
