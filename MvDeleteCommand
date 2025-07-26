@@ -50,7 +50,7 @@ public class MvDeleteCommand {
 
     private static int deleteWorld(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
-        ResourceKey<Level> levelKey = ResourceKey.create(RegistryAccess.REGISTRY_LEVEL, new ResourceLocation("multiverso", name));
+        ResourceKey<Level> levelKey = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
         ServerLevel level = server.getLevel(levelKey);
 
         if (levelKey.equals(Level.OVERWORLD) || levelKey.equals(Level.NETHER) || levelKey.equals(Level.END)) {
@@ -61,7 +61,7 @@ public class MvDeleteCommand {
         // Descargar si está cargado
         if (level != null) {
             level.save(null, true, true);
-            server.levels.remove(levelKey);
+            WorldManager.getInstance().unloadWorld(name);
         }
 
         // Remover del WorldManager
@@ -72,7 +72,7 @@ public class MvDeleteCommand {
         try {
             if (Files.exists(worldPath)) {
                 deleteDirectoryRecursively(worldPath.toFile());
-                source.sendSuccess(Component.literal("§aMundo '" + name + "' eliminado correctamente."), false);
+                source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' eliminado correctamente."), false);
                 return 1;
             } else {
                 source.sendFailure(Component.literal("§cEl mundo no existe en disco."));
