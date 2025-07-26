@@ -108,9 +108,9 @@ public class MvTpCommand {
         player.teleportTo(targetLevel, finalX, finalY, finalZ, player.getYRot(), player.getXRot());
 
         if (!player.getUUID().equals(source.getEntity() != null ? source.getEntity().getUUID() : null)) {
-            source.sendSuccess(Component.literal("§aJugador '" + player.getName().getString() + "' teletransportado a '" + worldName + "'."), true);
+            source.sendSuccess(() -> Component.literal("§aJugador '" + player.getName().getString() + "' teletransportado a '" + worldName + "'."), true);
         } else {
-            source.sendSuccess(Component.literal("§aTeletransportado a '" + worldName + "'."), false);
+            source.sendSuccess(() -> Component.literal("§aTeletransportado a '" + worldName + "'."), false);
         }
 
         return 1;
