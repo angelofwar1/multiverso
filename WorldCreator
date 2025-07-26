@@ -3,18 +3,17 @@ package com.crafterscr.Multiverso.world;
 import com.crafterscr.Multiverso.WorldManager;
 import com.crafterscr.Multiverso.config.MultiversoConfigManager;
 import com.crafterscr.Multiverso.config.WorldConfig;
-import com.crafterscr.Multiverso.util.PermissiveDirectoryValidator;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.Lifecycle;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.progress.ChunkProgressListener;
@@ -33,10 +32,8 @@ import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.PrimaryLevelData;
-import net.minecraft.world.level.gameevent.GameEventListenerRegistry;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.ServerLevelData;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.CustomSpawner;
@@ -53,7 +50,7 @@ public class WorldCreator {
 
     public static ServerLevel loadExistingWorld(MinecraftServer server, String worldName) {
         ResourceKey<Level> key = ResourceKey.create(
-                net.minecraft.core.registries.Registries.DIMENSION,
+                Registries.DIMENSION,
                 new ResourceLocation("multiverso", worldName)
         );
         return server.getLevel(key);
@@ -77,15 +74,15 @@ public class WorldCreator {
         MinecraftServer server = source.getServer();
         RegistryAccess registryAccess = server.registryAccess();
 
-        ResourceKey<Level> levelKey = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
-        ResourceKey<LevelStem> stemKey = ResourceKey.create(net.minecraft.core.registries.Registries.LEVEL_STEM, new ResourceLocation("multiverso", name));
+        ResourceKey<Level> levelKey = ResourceKey.create(Registries.DIMENSION, new ResourceLocation("multiverso", name));
+        ResourceKey<LevelStem> stemKey = ResourceKey.create(Registries.LEVEL_STEM, new ResourceLocation("multiverso", name));
 
         Holder<DimensionType> dimensionTypeHolder;
         try {
             dimensionTypeHolder = switch (type.toLowerCase()) {
-                case "nether" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.NETHER);
-                case "end" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.END);
-                case "overworld" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
+                case "nether" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.NETHER);
+                case "end" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.END);
+                case "overworld" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
                 default -> throw new IllegalArgumentException("Tipo de dimensión inválido: " + type);
             };
         } catch (Exception e) {
@@ -96,15 +93,15 @@ public class WorldCreator {
 
         ChunkGenerator chunkGenerator = switch (generator.toLowerCase()) {
             case "flat" -> {
-                var biomeRegistry = registryAccess.lookup(net.minecraft.core.registries.Registries.BIOME).orElseThrow();
-                var structureSets = registryAccess.lookup(net.minecraft.core.registries.Registries.STRUCTURE_SET).orElseThrow();
-                var placedFeatures = registryAccess.lookup(net.minecraft.core.registries.Registries.PLACED_FEATURE).orElseThrow();
+                var biomeRegistry = registryAccess.lookup(Registries.BIOME).orElseThrow();
+                var structureSets = registryAccess.lookup(Registries.STRUCTURE_SET).orElseThrow();
+                var placedFeatures = registryAccess.lookup(Registries.PLACED_FEATURE).orElseThrow();
                 var flatSettings = FlatLevelGeneratorSettings.getDefault(biomeRegistry, structureSets, placedFeatures);
                 yield new FlatLevelSource(flatSettings);
             }
             case "normal" -> server.overworld().getChunkSource().getGenerator();
             case "void" -> {
-                var biomeRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+                var biomeRegistry = registryAccess.registryOrThrow(Registries.BIOME);
                 var plains = biomeRegistry.getHolderOrThrow(Biomes.PLAINS);
                 var biomeSource = new FixedBiomeSource(plains);
                 yield new VoidChunkGenerator(biomeSource);
@@ -119,7 +116,7 @@ public class WorldCreator {
 
         LevelStem levelStem = new LevelStem(dimensionTypeHolder, chunkGenerator);
 
-        LevelStorageSource.LevelStorageAccess storageAccess;
+        LevelStorageSource.LevelStorageAccess storageAccess = null;
         try {
             Path savesDir = server.getWorldPath(LevelResource.ROOT);
             Path backupsDir = savesDir.resolve("../backups").normalize();
@@ -130,7 +127,7 @@ public class WorldCreator {
             storageAccess = new LevelStorageSource(
                     savesDir,
                     backupsDir,
-                    new PermissiveDirectoryValidator(),
+                    null,
                     server.getFixerUpper()
             ).createAccess(name);
         } catch (IOException e) {
