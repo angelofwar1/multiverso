@@ -1,7 +1,5 @@
 package com.crafterscr.Multiverso;
 
-import com.crafterscr.Multiverso.config.MultiversoConfigManager;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -28,7 +26,6 @@ public class WorldManager {
 
         // Registrar en la configuración si es un ServerLevel
         if (world instanceof ServerLevel serverLevel) {
-            MultiversoConfigManager.registerWorld(serverLevel);
         }
     }
 
