@@ -49,9 +49,6 @@ public class Multiverso {
         MinecraftServer server = event.getServer();
         Path worldsDir = server.getWorldPath(LevelResource.ROOT).getParent();
 
-        // Cargar configuración global de mundos
-        MultiversoConfigManager.loadConfig();
-
         if (worldsDir != null && Files.isDirectory(worldsDir)) {
             try {
                 Files.list(worldsDir)
@@ -65,7 +62,7 @@ public class Multiverso {
                             ServerLevel level = server.getLevel(levelKey);
 
                             if (level == null) {
-                                // Mundo no cargado, lo cargamos y registramos
+                                // Mundo no cargado, lo cargamos
                                 try {
                                     ServerLevel loadedWorld = WorldCreator.loadExistingWorld(server, worldName);
                                     if (loadedWorld != null) {
@@ -79,7 +76,7 @@ public class Multiverso {
                                     ex.printStackTrace();
                                 }
                             } else {
-                                // Mundo ya cargado, solo registrarlo
+                                // Mundo ya cargado
                                 WorldManager.getInstance().addWorld(worldName, level);
                                 System.out.println("Mundo ya cargado y registrado: " + worldName);
                             }
@@ -90,9 +87,13 @@ public class Multiverso {
         }
     }
 
+
+
     @SubscribeEvent
     public static void onWorldLoad(LevelEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         MultiversoConfigManager.WorldSettingsApplier.applySettingsToWorld(level);
     }
+
+
 }
