@@ -114,4 +114,11 @@ public class MultiversoConfigManager {
             // Usa tu clase WorldSettingsApplier.java para aplicar mob spawning y spawn point.
         }
     }
+
+    public static void registerWorldConfig(WorldConfig config) {
+        if (!configFile.worlds.containsKey(config.name)) {
+            configFile.worlds.put(config.name, config);
+            saveConfig();
+        }
+    }
 }
