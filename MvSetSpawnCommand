@@ -39,7 +39,7 @@ public class MvSetSpawnCommand {
                         MultiversoConfigManager.saveConfig();
                     }
 
-                    source.sendSuccess(Component.literal("§aSpawn establecido y guardado para el mundo §e" + worldName +
+                    source.sendSuccess(() -> Component.literal("§aSpawn establecido y guardado para el mundo §e" + worldName +
                             " §aen §b" + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
                     return 1;
                 }));
