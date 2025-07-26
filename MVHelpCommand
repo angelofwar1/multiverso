@@ -12,15 +12,19 @@ public class MVHelpCommand {
                 .executes(ctx -> {
                     CommandSourceStack source = ctx.getSource();
 
-                    source.sendSuccess(Component.literal("§6===§e§l[§a§lCraftersCR§e§l] §aComandos Multiverso §6==="), false);
-                    source.sendSuccess(Component.literal("§e/mvcreate <name> <type> <generator> §7- Crear un nuevo mundo"), false);
-                    source.sendSuccess(Component.literal("§e/mvload <name> §7- Cargar un mundo existente"), false);
-                    source.sendSuccess(Component.literal("§e/mvdelete <name> confirm §7- Eliminar un mundo (requiere confirmación)"), false);
-                    source.sendSuccess(Component.literal("§e/mvtp <name> §7- Teletransportarse a un mundo"), false);
-                    source.sendSuccess(Component.literal("§e/mvlist §7- Listar mundos cargados"), false);
-                    source.sendSuccess(Component.literal("§e/mvremove <name> §7- Descargar un mundo cargado"), false);
-                    source.sendSuccess(Component.literal("§e/mvreloadconfig §7- Recargar la configuración de mundos"), false);
-                    source.sendSuccess(Component.literal("§6==========================="), false);
+                    source.sendSuccess(() -> Component.literal("§6===§e§l[§a§lCraftersCR§e§l] §aComandos Multiverso §6==="), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvcreate <name> <type> <generator> §7- Crear un nuevo mundo"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvload <name> §7- Cargar un mundo existente"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvdelete <name> confirm §7- Eliminar un mundo (requiere confirmación)"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvtp <name> §7- Teletransportarse a un mundo"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvlist §7- Listar mundos cargados"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvremove <name> §7- Descargar un mundo cargado"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvreloadconfig §7- Recargar la configuración de mundos"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvset <mundo> <opcion> <valor> §7- Configurar opciones del mundo"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvsetspawn §7- Establecer el spawn del mundo actual"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvteleport <jugador> <mundo> §7- Teletransportar jugador a mundo"), false);
+                    source.sendSuccess(() -> Component.literal("§e/mvhelp §7Muestra los comandos"), false);
+                    source.sendSuccess(() -> Component.literal("§6==========================="), false);
 
                     return 1;
                 })
