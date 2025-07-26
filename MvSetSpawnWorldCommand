@@ -1,0 +1,30 @@
+package com.crafterscr.Multiverso.commands;
+
+import com.crafterscr.Multiverso.config.MultiversoConfigManager;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+
+public class MvSetSpawnWorldCommand {
+
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("mvsetspawnworld")
+                .requires(source -> source.hasPermission(2)) // Solo OP
+                .then(Commands.argument("mundo", StringArgumentType.string())
+                        .executes(ctx -> {
+                            String worldName = StringArgumentType.getString(ctx, "mundo");
+
+                            if (MultiversoConfigManager.getWorldConfig(worldName) == null) {
+                                ctx.getSource().sendFailure(Component.literal("§cEse mundo no está registrado en la configuración."));
+                                return 0;
+                            }
+
+                            MultiversoConfigManager.setSpawnWorld(worldName);
+                            ctx.getSource().sendSuccess(() -> Component.literal("§aEl mundo de spawn ha sido establecido a §e" + worldName), false);
+                            return 1;
+                        })
+                ));
+    }
+}
