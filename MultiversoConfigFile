@@ -4,6 +4,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class MultiversoConfigFile {
-    public String spawnWorld = "world";
+    public String spawnWorld = "overworld"; // Puedes dejar este valor por defecto
     public Map<String, WorldConfig> worlds = new HashMap<>();
 }
