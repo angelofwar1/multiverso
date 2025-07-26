@@ -86,7 +86,7 @@ public class MvLoadCommand {
             }
 
             WorldManager.getInstance().addWorld(name, loadedLevel);
-            source.sendSuccess(Component.literal("§aMundo '" + name + "' cargado correctamente."), false);
+            source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' cargado correctamente."), false);
             return 1;
 
         } catch (Exception e) {
