@@ -38,7 +38,7 @@ public class MVCreateCommand {
                                                 player = p;
                                             }
 
-                                            return WorldCreator.createWorld(ctx.getSource(), name, type, generator, player);
+                                            return WorldCreator.createWorld(ctx.getSource(), name, type, generator, System.currentTimeMillis(), player);
                                         })
                                 )
                         )
