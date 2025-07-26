@@ -4,50 +4,48 @@ import com.crafterscr.Multiverso.WorldManager;
 import com.crafterscr.Multiverso.config.MultiversoConfigManager;
 import com.crafterscr.Multiverso.config.WorldConfig;
 import com.crafterscr.Multiverso.util.PermissiveDirectoryValidator;
-import com.mojang.datafixers.DataFixer;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.Lifecycle;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.HolderGetter;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.Registries;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelSettings;
-import net.minecraft.world.level.levelgen.WorldOptions;
-import net.minecraft.world.level.biome.Biome;
+import net.minecraft.server.level.progress.ChunkProgressListener;
+import net.minecraft.world.RandomSequences;
+import net.minecraft.world.level.*;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.FixedBiomeSource;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
-import net.minecraft.world.level.levelgen.FlatLevelSource;
-import com.crafterscr.Multiverso.world.VoidChunkGenerator;
+import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.PrimaryLevelData;
+import net.minecraft.world.level.gameevent.GameEventListenerRegistry;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.ServerLevelData;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.CustomSpawner;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 public class WorldCreator {
@@ -55,75 +53,64 @@ public class WorldCreator {
 
     public static ServerLevel loadExistingWorld(MinecraftServer server, String worldName) {
         ResourceKey<Level> key = ResourceKey.create(
-                Registries.DIMENSION,
+                net.minecraft.core.registries.Registries.DIMENSION,
                 new ResourceLocation("multiverso", worldName)
         );
-
-        ServerLevel existing = server.getLevel(key);
-        if (existing != null) {
-            return existing;
-        }
-
-        LOGGER.info("Intentando cargar mundo existente: " + worldName);
-        return null;
+        return server.getLevel(key);
     }
 
-    public static int createWorld(CommandSourceStack source, String name, String type, String generator, ServerPlayer player) {
+    public static class DummyChunkProgressListener implements ChunkProgressListener {
+        @Override
+        public void updateSpawnPos(ChunkPos chunkPos) {}
+
+        @Override
+        public void onStatusChange(ChunkPos pos, ChunkStatus status) {}
+
+        @Override
+        public void start() {}
+
+        @Override
+        public void stop() {}
+    }
+
+    public static int createWorld(CommandSourceStack source, String name, String type, String generator, long seed, ServerPlayer player) {
         MinecraftServer server = source.getServer();
-        var registryAccess = server.registryAccess();
+        RegistryAccess registryAccess = server.registryAccess();
 
-        ResourceKey<Level> levelKey = ResourceKey.create(Registries.DIMENSION, new ResourceLocation("multiverso", name));
-        ResourceKey<LevelStem> stemKey = ResourceKey.create(Registries.LEVEL_STEM, new ResourceLocation("multiverso", name));
+        ResourceKey<Level> levelKey = ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, new ResourceLocation("multiverso", name));
+        ResourceKey<LevelStem> stemKey = ResourceKey.create(net.minecraft.core.registries.Registries.LEVEL_STEM, new ResourceLocation("multiverso", name));
 
-        // Obtener tipo de dimensión
         Holder<DimensionType> dimensionTypeHolder;
         try {
             dimensionTypeHolder = switch (type.toLowerCase()) {
-                case "nether" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.NETHER);
-                case "end" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.END);
-                case "overworld" -> registryAccess.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
+                case "nether" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.NETHER);
+                case "end" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.END);
+                case "overworld" -> registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
                 default -> throw new IllegalArgumentException("Tipo de dimensión inválido: " + type);
             };
         } catch (Exception e) {
-            source.sendFailure(Component.literal("§cError obteniendo el tipo de dimensión: " + e.getMessage()));
+            source.sendFailure(Component.literal("\u00a7cError obteniendo el tipo de dimensión: " + e.getMessage()));
             LOGGER.error("Error al obtener tipo de dimensión", e);
             return 0;
         }
 
-        new Structure.StructureSettings(Map.of(), Map.of(), NoiseRouterData.NOISE_SETTINGS);
-
-        // Crear generador de chunks
         ChunkGenerator chunkGenerator = switch (generator.toLowerCase()) {
             case "flat" -> {
-                var biomeRegistry = registryAccess.lookup(Registries.BIOME).orElseThrow();
-                var structureSets = registryAccess.lookup(Registries.STRUCTURE_SET).orElseThrow();
-                var placedFeatures = registryAccess.lookup(Registries.PLACED_FEATURE).orElseThrow();
+                var biomeRegistry = registryAccess.lookup(net.minecraft.core.registries.Registries.BIOME).orElseThrow();
+                var structureSets = registryAccess.lookup(net.minecraft.core.registries.Registries.STRUCTURE_SET).orElseThrow();
+                var placedFeatures = registryAccess.lookup(net.minecraft.core.registries.Registries.PLACED_FEATURE).orElseThrow();
                 var flatSettings = FlatLevelGeneratorSettings.getDefault(biomeRegistry, structureSets, placedFeatures);
                 yield new FlatLevelSource(flatSettings);
             }
-            case "normal" -> {
-                yield server.overworld().getChunkSource().getGenerator();
-            }
+            case "normal" -> server.overworld().getChunkSource().getGenerator();
             case "void" -> {
-                var biomeRegistry = registryAccess.registryOrThrow(Registries.BIOME);
+                var biomeRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
                 var plains = biomeRegistry.getHolderOrThrow(Biomes.PLAINS);
                 var biomeSource = new FixedBiomeSource(plains);
-
-                Map<StructureSet, StructureSettings.StructureSetting> structureMap = Map.of();
-                Map<String, StructureSettings.StructureSetting> legacyStructureMap = Map.of();
-
-                Structure.StructureSettings structureSettings = new Structure.StructureSettings(
-                        structureMap,
-                        legacyStructureMap,
-                        NoiseRouterData.DEFAULT_NOISE_SETTINGS
-                );
-
-                Holder<Structure.StructureSettings> structureHolder = Holder.direct(structureSettings);
-
-                yield new VoidChunkGenerator(biomeSource, structureHolder);
+                yield new VoidChunkGenerator(biomeSource);
             }
             default -> {
-                source.sendFailure(Component.literal("§cGenerador inválido: " + generator));
+                source.sendFailure(Component.literal("\u00a7cGenerador inválido: " + generator));
                 yield null;
             }
         };
@@ -132,7 +119,6 @@ public class WorldCreator {
 
         LevelStem levelStem = new LevelStem(dimensionTypeHolder, chunkGenerator);
 
-        // Crear acceso a almacenamiento
         LevelStorageSource.LevelStorageAccess storageAccess;
         try {
             Path savesDir = server.getWorldPath(LevelResource.ROOT);
@@ -141,59 +127,63 @@ public class WorldCreator {
                 Files.createDirectories(backupsDir);
             }
 
-            DataFixer dataFixer = server.getFixerUpper();
-            LevelStorageSource storageSource = new LevelStorageSource(savesDir, backupsDir, new PermissiveDirectoryValidator(), dataFixer);
-            storageAccess = storageSource.createAccess(name);
+            storageAccess = new LevelStorageSource(
+                    savesDir,
+                    backupsDir,
+                    new PermissiveDirectoryValidator(),
+                    server.getFixerUpper()
+            ).createAccess(name);
         } catch (IOException e) {
             LOGGER.error("No se pudo crear acceso al almacenamiento", e);
-            source.sendFailure(Component.literal("§cError de almacenamiento."));
+            source.sendFailure(Component.literal("\u00a7cError de almacenamiento."));
             return 0;
         }
 
-        // Clonar settings desde el Overworld
-        PrimaryLevelData templateData = (PrimaryLevelData) server.overworld().getLevelData();
+        PrimaryLevelData template = (PrimaryLevelData) server.overworld().getLevelData();
         LevelSettings levelSettings = new LevelSettings(
                 name,
                 GameType.SURVIVAL,
                 false,
-                Difficulty.NORMAL,
-                false,
+                template.getDifficulty(),
+                template.isHardcore(),
                 new GameRules(),
-                templateData.getDataConfiguration()
+                template.getDataConfiguration()
         );
 
-        WorldOptions worldOptions = new WorldOptions(0L, true, false);
-        PrimaryLevelData worldData = new PrimaryLevelData(
-                levelSettings,
-                worldOptions,
-                PrimaryLevelData.SpecialWorldProperty.NONE,
-                templateData.getLifecycle()
-        );
+        WorldOptions worldOptions = new WorldOptions(seed, true, false);
+        PrimaryLevelData worldData = new PrimaryLevelData(levelSettings, worldOptions, PrimaryLevelData.SpecialWorldProperty.NONE, Lifecycle.stable());
 
-        // Obtener Executor por reflexión
-        Executor bgExecutor;
+        Executor executor;
         try {
-            Field execField = MinecraftServer.class.getDeclaredField("backgroundExecutor");
-            execField.setAccessible(true);
-            bgExecutor = (Executor) execField.get(server);
-        } catch (ReflectiveOperationException e) {
-            LOGGER.warn("No se pudo acceder al executor, usando fallback.");
-            bgExecutor = Runnable::run;
+            Field f = MinecraftServer.class.getDeclaredField("backgroundExecutor");
+            f.setAccessible(true);
+            executor = (Executor) f.get(server);
+        } catch (Exception ex) {
+            executor = Runnable::run;
         }
 
-        // Crear el mundo
-        ServerLevel newWorld = new ServerLevel(
-                server,
-                bgExecutor,
-                storageAccess,
-                worldData,
-                levelKey,
-                levelStem,
-                false,
-                null
-        );
 
-        // Si es void, colocar plataforma
+        ChunkProgressListener chunkProgressListener = new DummyChunkProgressListener();
+        ServerLevelData serverLevelData = (ServerLevelData) worldData;
+
+        // Lista vacía de CustomSpawner (para evitar errores)
+        List<CustomSpawner> emptySpawners = List.of();
+
+        ServerLevel newWorld = new ServerLevel(
+                        server,
+                        executor,
+                        storageAccess,
+                        serverLevelData, // casteado
+                        levelKey,
+                        levelStem,
+                        chunkProgressListener,
+                        false, // isDebug
+                        worldOptions.seed(),
+                        emptySpawners, // tickTime or isClient
+                        true,
+                        new RandomSequences(worldOptions.seed())
+                );
+
         if (generator.equalsIgnoreCase("void")) {
             int y = newWorld.getMinBuildHeight() + 64;
             for (int x = -2; x <= 2; x++) {
@@ -202,18 +192,15 @@ public class WorldCreator {
                 }
             }
             newWorld.setBlockAndUpdate(new BlockPos(0, y + 1, 0), Blocks.TORCH.defaultBlockState());
-
             if (player != null) {
                 player.teleportTo(newWorld, 0.5, y + 1, 0.5, player.getYRot(), player.getXRot());
             }
         }
 
-        // Registrar mundo y configuración
         WorldManager.getInstance().addWorld(name, newWorld);
-        WorldConfig config = new WorldConfig(name, type, generator, 0, "normal", true, true);
-        MultiversoConfigManager.registerWorld(name, config, server.getWorldPath(LevelResource.ROOT).getParent());
+        MultiversoConfigManager.registerWorld(new WorldConfig(name, type, seed, generator));
 
-        source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' creado correctamente."), false);
+        source.sendSuccess(() -> Component.literal("\u00a7aMundo '" + name + "' creado correctamente."), false);
         return 1;
     }
 }
