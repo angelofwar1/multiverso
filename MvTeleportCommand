@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,15 +26,14 @@ public class MvTeleportCommand {
                         .suggests((ctx, builder) -> {
                             List<String> players = ctx.getSource().getServer()
                                     .getPlayerList().getPlayers().stream()
-                                    .map(ServerPlayer::getName)
-                                    .map(Component::getString)
+                                    .map(p -> p.getGameProfile().getName())
                                     .collect(Collectors.toList());
                             return SharedSuggestionProvider.suggest(players, builder);
                         })
                         .then(Commands.argument("mundo", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
-                                    List<String> worlds = WorldManager.getInstance()
-                                            .getAvailableWorldNames();
+                                    List<String> worlds = new ArrayList<>(WorldManager.getInstance()
+                                            .getAvailableWorldNames());
                                     return SharedSuggestionProvider.suggest(worlds, builder);
                                 })
                                 .executes(ctx -> {
@@ -45,8 +45,8 @@ public class MvTeleportCommand {
                 // Opción: /mvteleport <mundo> (ejecutado por jugador)
                 .then(Commands.argument("mundo", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
-                            List<String> worlds = WorldManager.getInstance()
-                                    .getAvailableWorldNames();
+                            List<String> worlds = new ArrayList<>(WorldManager.getInstance()
+                                    .getAvailableWorldNames());
                             return SharedSuggestionProvider.suggest(worlds, builder);
                         })
                         .executes(ctx -> {
@@ -64,7 +64,7 @@ public class MvTeleportCommand {
     }
 
     private static int teleportPlayer(CommandSourceStack source, String playerName, String worldName) {
-        ServerPlayer player = source.getServer().getPlayerList().getPlayer(playerName);
+        ServerPlayer player = source.getServer().getPlayerList().getPlayerByName(playerName);
         if (player == null) {
             source.sendFailure(Component.literal("§cEl jugador '" + playerName + "' no está conectado."));
             return 0;
@@ -80,10 +80,15 @@ public class MvTeleportCommand {
             return 0;
         }
 
-        player.teleportTo(level, level.getSharedSpawnPos().getX() + 0.5, level.getSharedSpawnPos().getY(),
-                level.getSharedSpawnPos().getZ() + 0.5, player.getYRot(), player.getXRot());
+        player.teleportTo(level,
+                level.getSharedSpawnPos().getX() + 0.5,
+                level.getSharedSpawnPos().getY(),
+                level.getSharedSpawnPos().getZ() + 0.5,
+                player.getYRot(),
+                player.getXRot()
+        );
 
-        source.sendSuccess(Component.literal("§aJugador '" + player.getName().getString() + "' teletransportado a '" + worldName + "'."), true);
+        source.sendSuccess(() -> Component.literal("§aJugador '" + player.getName().getString() + "' teletransportado a '" + worldName + "'."), true);
         return 1;
     }
 }
