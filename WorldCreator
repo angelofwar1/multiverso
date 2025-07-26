@@ -195,7 +195,7 @@ public class WorldCreator {
         }
 
         WorldManager.getInstance().addWorld(name, newWorld);
-        MultiversoConfigManager.registerWorld(new WorldConfig(name, type, seed, generator));
+        MultiversoConfigManager.registerWorldConfig(new WorldConfig(name, type, seed, generator));
 
         source.sendSuccess(() -> Component.literal("\u00a7aMundo '" + name + "' creado correctamente."), false);
         return 1;
