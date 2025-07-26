@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,16 @@ public class WorldManager {
         }
     }
 
+    public Map<String, ServerLevel> getLoadedWorlds() {
+        Map<String, ServerLevel> serverWorlds = new HashMap<>();
+        for (Map.Entry<String, Level> entry : loadedWorlds.entrySet()) {
+            if (entry.getValue() instanceof ServerLevel serverLevel) {
+                serverWorlds.put(entry.getKey(), serverLevel);
+            }
+        }
+        return serverWorlds;
+    }
+
     public Level getWorld(String name) {
         return loadedWorlds.get(name.toLowerCase());
     }
@@ -39,6 +50,21 @@ public class WorldManager {
 
     public void removeWorld(String name) {
         loadedWorlds.remove(name.toLowerCase());
+    }
+
+    public void unloadWorld(String name) {
+        ServerLevel level = (ServerLevel) this.getWorld(name);
+        if (level != null) {
+            MinecraftServer server = level.getServer();
+            try {
+                server.getLevel(level.dimension()).close();
+                System.out.println("[Multiverso] Mundo '" + name + "' descargado correctamente.");
+            } catch (IOException e) {
+                System.err.println("[Multiverso] Error al cerrar el mundo '" + name + "': " + e.getMessage());
+                e.printStackTrace(); // o mejor: loguea apropiadamente
+            }
+            this.loadedWorlds.remove(name.toLowerCase());
+        }
     }
 
     // Opcional: método para cargar mundos existentes al iniciar el servidor
