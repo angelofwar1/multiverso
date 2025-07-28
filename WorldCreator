@@ -3,6 +3,7 @@ package com.crafterscr.Multiverso.world;
 import com.crafterscr.Multiverso.WorldManager;
 import com.crafterscr.Multiverso.config.MultiversoConfigManager;
 import com.crafterscr.Multiverso.config.WorldConfig;
+import com.mojang.datafixers.DataFixer;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.Lifecycle;
 import net.minecraft.commands.CommandSourceStack;
@@ -17,6 +18,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.progress.ChunkProgressListener;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.RandomSequences;
 import net.minecraft.world.level.*;
 import net.minecraft.world.level.biome.Biomes;
@@ -37,6 +39,15 @@ import net.minecraft.world.level.storage.ServerLevelData;
 import org.slf4j.Logger;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.CustomSpawner;
+import net.minecraft.util.Unit;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelSettings;
+import net.minecraft.world.level.levelgen.*;
+import net.minecraft.world.level.storage.WorldData;
+import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.DataPackConfig;
+import net.minecraft.world.flag.FeatureFlags;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -44,6 +55,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Executor;
+
 
 public class WorldCreator {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -71,6 +83,7 @@ public class WorldCreator {
     }
 
     public static int createWorld(CommandSourceStack source, String name, String type, String generator, long seed, ServerPlayer player) {
+        source.sendSuccess(() -> Component.literal("§eCreando mundo §6" + name + "§e..."), false); // 👈 MENSAJE DE INICIO
         MinecraftServer server = source.getServer();
         RegistryAccess registryAccess = server.registryAccess();
 
@@ -181,6 +194,17 @@ public class WorldCreator {
                         new RandomSequences(worldOptions.seed())
                 );
 
+        // Fuerza la carga del área de spawn para asegurar que el mundo esté listo
+        BlockPos spawn = new BlockPos(0, newWorld.getMinBuildHeight() + 64, 0);
+        newWorld.setDefaultSpawnPos(spawn, 0.0F);
+        newWorld.getChunkSource().addRegionTicket(
+                net.minecraft.server.level.TicketType.START,
+                new net.minecraft.world.level.ChunkPos(spawn),
+                1,
+                Unit.INSTANCE // net.minecraft.util.Unit.INSTANCE
+        );
+
+
         if (generator.equalsIgnoreCase("void")) {
             int y = newWorld.getMinBuildHeight() + 64;
             for (int x = -2; x <= 2; x++) {
@@ -189,15 +213,164 @@ public class WorldCreator {
                 }
             }
             newWorld.setBlockAndUpdate(new BlockPos(0, y + 1, 0), Blocks.TORCH.defaultBlockState());
-            if (player != null) {
-                player.teleportTo(newWorld, 0.5, y + 1, 0.5, player.getYRot(), player.getXRot());
-            }
         }
 
         WorldManager.getInstance().addWorld(name, newWorld);
         MultiversoConfigManager.registerWorldConfig(new WorldConfig(name, type, seed, generator));
 
-        source.sendSuccess(() -> Component.literal("\u00a7aMundo '" + name + "' creado correctamente."), false);
+        source.sendSuccess(() -> Component.literal("§aMundo '" + name + "' creado correctamente."), false);
         return 1;
     }
+
+    public static ServerLevel createWorld(MinecraftServer server, String worldName, WorldCreator.MyWorldOptions options) {
+        try {
+            Path savesDir = server.getWorldPath(LevelResource.ROOT).getParent(); // base .minecraft/saves
+            DataFixer dataFixer = server.getFixerUpper();
+
+            LevelStorageSource storageSource = new LevelStorageSource(
+                    savesDir,
+                    savesDir.resolve("../backups").normalize(),
+                    null,       // optional WorldStem - puede ser null aquí
+                    dataFixer
+            );
+
+            LevelStorageSource.LevelStorageAccess storageAccess = storageSource.createAccess(worldName);
+
+            // Configurar LevelSettings
+            GameRules gameRules = new GameRules();
+            GameType gameType = GameType.SURVIVAL;
+            Difficulty difficulty = Difficulty.NORMAL;
+            boolean hardcore = false;
+            boolean allowCommands = true;
+            WorldDataConfiguration config = new WorldDataConfiguration(
+                    new DataPackConfig(List.of(), List.of()),
+                    FeatureFlags.DEFAULT_FLAGS
+            );
+
+            LevelSettings levelSettings = new LevelSettings(
+                    worldName,
+                    GameType.SURVIVAL,
+                    false, // hardcore
+                    Difficulty.NORMAL,
+                    false, // allowCommands
+                    new GameRules(),
+                    config
+            );
+
+            WorldOptions worldOptions = new WorldOptions(options.seed(), false, false);
+            PrimaryLevelData levelData = new PrimaryLevelData(levelSettings, worldOptions, PrimaryLevelData.SpecialWorldProperty.NONE, Lifecycle.stable());
+
+            // Crear ChunkGenerator
+            RegistryAccess registries = server.registryAccess();
+            ChunkGenerator generator;
+
+            if (options.generator().equalsIgnoreCase("flat")) {
+                var flatSettings = FlatLevelGeneratorSettings.getDefault(
+                        registries.lookupOrThrow(Registries.BIOME),
+                        registries.lookupOrThrow(Registries.STRUCTURE_SET),
+                        registries.lookupOrThrow(Registries.PLACED_FEATURE)
+                );
+                generator = new FlatLevelSource(flatSettings);
+            } else if (options.generator().equalsIgnoreCase("void")) {
+                var biomeRegistry = registries.registryOrThrow(Registries.BIOME);
+                var plains = biomeRegistry.getHolderOrThrow(Biomes.PLAINS);
+                var biomeSource = new FixedBiomeSource(plains);
+                generator = new VoidChunkGenerator(biomeSource);
+            } else {
+                generator = server.overworld().getChunkSource().getGenerator();
+            }
+
+            // Obtener el tipo de dimensión
+            Holder<DimensionType> dimensionType = switch (options.type().toLowerCase()) {
+                case "nether" -> registries.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.NETHER);
+                case "end" -> registries.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.END);
+                default -> registries.registryOrThrow(Registries.DIMENSION_TYPE).getHolderOrThrow(BuiltinDimensionTypes.OVERWORLD);
+            };
+
+            ResourceKey<Level> levelKey = ResourceKey.create(Registries.DIMENSION, new ResourceLocation("multiverso", worldName));
+            LevelStem levelStem = new LevelStem(dimensionType, generator);
+
+            // Obtener el executor vía reflexión (si no, usar Runnable::run como fallback)
+            Executor executor;
+            try {
+                Field f = MinecraftServer.class.getDeclaredField("backgroundExecutor");
+                f.setAccessible(true);
+                executor = (Executor) f.get(server);
+            } catch (Exception e) {
+                executor = Runnable::run;
+            }
+
+            // Crear instancia de mundo
+            ServerLevel newLevel = new ServerLevel(
+                    server,
+                    executor,
+                    storageAccess,
+                    levelData,
+                    levelKey,
+                    levelStem,
+                    new DummyChunkProgressListener(),
+                    false,
+                    worldOptions.seed(),
+                    List.of(),
+                    true,
+                    new RandomSequences(worldOptions.seed())
+            );
+
+            // Configurar posición de spawn
+            BlockPos spawn = new BlockPos(0, newLevel.getMinBuildHeight() + 64, 0);
+            newLevel.setDefaultSpawnPos(spawn, 0.0F);
+            newLevel.getChunkSource().addRegionTicket(
+                    net.minecraft.server.level.TicketType.START,
+                    new net.minecraft.world.level.ChunkPos(spawn),
+                    1,
+                    Unit.INSTANCE
+            );
+
+            // Generar plataforma inicial si es void
+            if (options.generator().equalsIgnoreCase("void")) {
+                int y = newLevel.getMinBuildHeight() + 64;
+                for (int x = -2; x <= 2; x++) {
+                    for (int z = -2; z <= 2; z++) {
+                        newLevel.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
+                    }
+                }
+                newLevel.setBlockAndUpdate(new BlockPos(0, y + 1, 0), Blocks.TORCH.defaultBlockState());
+            }
+
+            // Registrar en WorldManager
+            WorldManager.getInstance().addWorld(worldName, newLevel);
+            System.out.println("[Multiverso] Mundo creado correctamente: " + worldName);
+            return newLevel;
+
+        } catch (IOException e) {
+            System.err.println("[Multiverso] Error al crear el mundo: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static class MyWorldOptions {
+        private final long seed;
+        private final String type; // overworld, nether, end
+        private final String generator; // flat, normal, void
+
+        public MyWorldOptions(long seed, String type, String generator) {
+            this.seed = seed;
+            this.type = type;
+            this.generator = generator;
+        }
+
+        public long seed() {
+            return seed;
+        }
+
+        public String type() {
+            return type;
+        }
+
+        public String generator() {
+            return generator;
+        }
+    }
+
 }
